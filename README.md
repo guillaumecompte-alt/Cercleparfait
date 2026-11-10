@@ -12,4 +12,16 @@ Exemple : un écart de 1 % donne un cercle parfait à 99 %, un écart de 20 % do
 
 Le tracé doit faire un tour complet du centre pour être compté. Le meilleur score est gardé dans le navigateur.
 
-Ouvrir `index.html` dans un navigateur, ou l'activer avec GitHub Pages (Settings → Pages → branche `main`, dossier `/`).
+## En ligne
+
+https://cercleparfait.guillaume-compte.workers.dev
+
+## Déploiement (Cloudflare Workers)
+
+La page est dans `public/index.html` et la configuration dans `wrangler.jsonc`.
+
+```
+npx wrangler deploy
+```
+
+Pour un déploiement automatique à chaque push, connecter ce dépôt dans le tableau de bord Cloudflare : Workers & Pages → `cercleparfait` → Settings → Builds.
