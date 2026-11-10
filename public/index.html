@@ -3,51 +3,80 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
-<meta name="theme-color" content="#eef1f4">
+<meta name="theme-color" content="#0b1020">
 <title>Cercle Parfait</title>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=JetBrains+Mono:wght@400;600&display=swap">
+<meta name="description" content="Trace un cercle au doigt ou à la souris autour du point central et mesure ta précision.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='22' fill='%237c6cff'/%3E%3Cpath d='M27 30h20v20H27zM53 30h20v20H53zM27 56h20v20H27zM53 56h20v20H53z' fill='white'/%3E%3C/svg%3E">
 <style>
-/* Layout : feuille de papier millimétré plein écran, centre fixe au milieu, score en haut, consignes en bas */
+/* Charte graphique alignée sur le portail outilotheque.fr :
+   papier millimétré plein écran sur fond bleu nuit, centre fixe au milieu, score en haut, mesures en bas */
 :root{
-  --bg:#eef1f4; --grid:#dbe1e8; --grid-strong:#c6cfd9;
-  --ink:#16202b; --muted:#5d6b7a; --accent:#2348c9;
-  --good:#1f9d63; --warn:#d48a10; --bad:#d23a3a;
-  --f-display:"Space Grotesk",system-ui,sans-serif;
-  --f-mono:"JetBrains Mono",ui-monospace,Menlo,monospace;
+  color-scheme:dark;
+  --bg:#0b1020; --grid:rgba(149,134,255,.07); --grid-strong:rgba(149,134,255,.16);
+  --ink:#f4f5ff; --muted:#a1a9c4; --faint:#737e9f; --accent:#9586ff;
+  --good:#69d9c3; --warn:#ffbd73; --bad:#ff777f;
+  --panel-border:rgba(164,176,220,.13);
+  --f-display:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
 }
-@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
-  --bg:#0f151c; --grid:#1a232d; --grid-strong:#243140;
-  --ink:#e6edf4; --muted:#8c9bab; --accent:#6f8dff;
-  --good:#3ccf8a; --warn:#f0a83a; --bad:#ff6b6b; color-scheme:dark}}
-:root[data-theme="dark"]{
-  --bg:#0f151c; --grid:#1a232d; --grid-strong:#243140;
-  --ink:#e6edf4; --muted:#8c9bab; --accent:#6f8dff;
-  --good:#3ccf8a; --warn:#f0a83a; --bad:#ff6b6b; color-scheme:dark}
 *{box-sizing:border-box}
 html,body{height:100%;margin:0}
-body{background:var(--bg);color:var(--ink);font-family:var(--f-display);overflow:hidden;
+body{color:var(--ink);font-family:var(--f-display);letter-spacing:-.01em;overflow:hidden;
+  background:radial-gradient(ellipse at 50% -20%,rgba(91,77,187,.2),transparent 55%),var(--bg);
   -webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
-.app{position:relative;height:100%}
+.ambient{position:fixed;pointer-events:none;filter:blur(90px);opacity:.12;border-radius:50%}
+.ambient-one{width:340px;height:340px;background:#6f59ff;top:40%;left:-200px}
+.ambient-two{width:300px;height:300px;background:#22c8b0;bottom:-120px;right:-170px;opacity:.08}
+.app{position:relative;height:100%;display:flex;flex-direction:column}
+.topbar{position:relative;z-index:2;height:64px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));
+  border-bottom:1px solid rgba(174,185,226,.1);background:rgba(9,14,29,.68);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px)}
+.brand{display:flex;align-items:center;gap:11px;color:var(--ink);text-decoration:none;font-weight:850;font-size:14px;letter-spacing:.13em}
+.brand-dot{color:var(--accent)}
+.brand-mark{width:29px;height:29px;display:grid;grid-template-columns:1fr 1fr;gap:3px;padding:3px;border-radius:9px;
+  background:linear-gradient(140deg,#a89bff,#6957e8);box-shadow:0 4px 20px #7563ff33}
+.brand-mark span{background:#fff;border-radius:2px;opacity:.95}
+.brand-mark span:nth-child(2),.brand-mark span:nth-child(3){opacity:.62}
+.back{display:inline-flex;align-items:center;gap:8px;text-decoration:none;color:#dedaff;background:#7b6ae626;
+  border:1px solid #9687ff30;border-radius:8px;padding:8px 10px;font-size:11px;font-weight:800;transition:.18s ease}
+.back:hover{background:#8c7aff3d;color:#fff}
+.stage{position:relative;flex:1;min-height:0}
 canvas{position:absolute;inset:0;width:100%;height:100%;touch-action:none;display:block}
 .hud{position:absolute;left:0;right:0;top:0;pointer-events:none;
   padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));
-  padding-block:18px 0;display:flex;flex-direction:column;align-items:center;gap:4px;text-align:center}
-.label{font-family:var(--f-mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
-.score{font-size:clamp(52px,14vw,96px);font-weight:700;line-height:1;letter-spacing:-.03em;font-variant-numeric:tabular-nums}
-.score small{font-size:.42em;font-weight:500;color:var(--muted);margin-left:2px}
-.msg{font-size:15px;color:var(--muted);min-height:1.4em;text-wrap:balance}
+  padding-block:20px 0;display:flex;flex-direction:column;align-items:center;gap:6px;text-align:center}
+.label{display:inline-flex;align-items:center;gap:10px;font-size:10px;font-weight:800;letter-spacing:.2em;text-transform:uppercase;color:#aaa0ff}
+.hud .label::before,.hud .label::after{content:"";width:20px;height:1px;background:var(--accent);opacity:.8}
+.score{font-size:clamp(52px,14vw,96px);font-weight:780;line-height:1;letter-spacing:-.06em;font-variant-numeric:tabular-nums;
+  background:linear-gradient(100deg,#a99eff 5%,#7dcbdf 95%);color:transparent;-webkit-background-clip:text;background-clip:text}
+.score small{font-size:.42em;font-weight:650;margin-left:2px}
+.msg{font-size:14px;color:var(--muted);text-shadow:0 0 6px #0b1020,0 0 12px #0b1020;min-height:1.4em;text-wrap:balance;line-height:1.6}
 .foot{position:absolute;left:0;right:0;bottom:0;pointer-events:none;
   padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));
-  padding-block:0 18px;display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap}
-.stats{display:grid;grid-template-columns:auto auto;gap:2px 12px;font-family:var(--f-mono);font-size:12px;font-variant-numeric:tabular-nums}
-.stats dt{color:var(--muted)} .stats dd{margin:0;text-align:right}
-.best{font-family:var(--f-mono);font-size:12px;text-align:right}
-.best b{display:block;font-family:var(--f-display);font-size:22px}
+  padding-bottom:max(16px,env(safe-area-inset-bottom,0px));display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap}
+.panel{position:relative;overflow:hidden;border:1px solid var(--panel-border);border-radius:13px;padding:12px 14px;
+  background:linear-gradient(145deg,rgba(25,33,57,.88),rgba(15,21,39,.88));backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)}
+.panel::before{content:"";position:absolute;inset:0 0 auto;height:2px;background:var(--accent);opacity:.8}
+.stats{display:grid;grid-template-columns:auto auto;gap:3px 16px;margin:0;font-size:12px;font-variant-numeric:tabular-nums}
+.stats dt{color:var(--faint);font-weight:650} .stats dd{margin:0;text-align:right;font-weight:700}
+.best{text-align:right}
+.best::before{background:var(--good)}
+.best .label{color:var(--good);font-size:9px}
+.best b{display:block;font-size:22px;font-weight:780;letter-spacing:-.04em;margin-top:2px;font-variant-numeric:tabular-nums}
+@media (max-width:420px){.back span{display:none}}
 </style>
 </head>
 <body>
 
+<div class="ambient ambient-one"></div><div class="ambient ambient-two"></div>
 <div class="app">
+  <header class="topbar">
+    <a class="brand" href="https://outilotheque.fr/" aria-label="Retour au portail">
+      <span class="brand-mark"><span></span><span></span><span></span><span></span></span>
+      <span>LE HUB<span class="brand-dot">.</span></span>
+    </a>
+    <a class="back" href="https://outilotheque.fr/">← <span>Tous les outils</span></a>
+  </header>
+  <div class="stage">
   <canvas id="c"></canvas>
   <div class="hud">
     <div class="label" id="lab">Exemple</div>
@@ -55,12 +84,13 @@ canvas{position:absolute;inset:0;width:100%;height:100%;touch-action:none;displa
     <div class="msg" id="msg">Posez le doigt et faites un tour complet autour du point central.</div>
   </div>
   <div class="foot">
-    <dl class="stats">
+    <dl class="stats panel">
       <dt>r min</dt><dd id="rmin">—</dd>
       <dt>r max</dt><dd id="rmax">—</dd>
       <dt>écart</dt><dd id="gap">—</dd>
     </dl>
-    <div class="best"><span class="label">Record</span><b id="best">—</b></div>
+    <div class="best panel"><span class="label">Record</span><b id="best">—</b></div>
+  </div>
   </div>
 </div>
 

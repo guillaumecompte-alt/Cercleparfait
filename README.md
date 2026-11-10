@@ -14,7 +14,7 @@ Le tracé doit faire un tour complet du centre pour être compté. Le meilleur s
 
 ## En ligne
 
-https://cercleparfait.guillaume-compte.workers.dev
+https://cercleparfait.outilotheque.fr
 
 ## Déploiement (Cloudflare Workers)
 
