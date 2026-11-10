@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<meta name="theme-color" content="#eef1f4">
+<title>Cercle Parfait</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout : feuille de papier millimétré plein écran, centre fixe au milieu, score en haut, consignes en bas */
+:root{
+  --bg:#eef1f4; --grid:#dbe1e8; --grid-strong:#c6cfd9;
+  --ink:#16202b; --muted:#5d6b7a; --accent:#2348c9;
+  --good:#1f9d63; --warn:#d48a10; --bad:#d23a3a;
+  --f-display:"Space Grotesk",system-ui,sans-serif;
+  --f-mono:"JetBrains Mono",ui-monospace,Menlo,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0f151c; --grid:#1a232d; --grid-strong:#243140;
+  --ink:#e6edf4; --muted:#8c9bab; --accent:#6f8dff;
+  --good:#3ccf8a; --warn:#f0a83a; --bad:#ff6b6b; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0f151c; --grid:#1a232d; --grid-strong:#243140;
+  --ink:#e6edf4; --muted:#8c9bab; --accent:#6f8dff;
+  --good:#3ccf8a; --warn:#f0a83a; --bad:#ff6b6b; color-scheme:dark}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-display);overflow:hidden;
+  -webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+.app{position:relative;height:100%}
+canvas{position:absolute;inset:0;width:100%;height:100%;touch-action:none;display:block}
+.hud{position:absolute;left:0;right:0;top:0;pointer-events:none;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));
+  padding-block:18px 0;display:flex;flex-direction:column;align-items:center;gap:4px;text-align:center}
+.label{font-family:var(--f-mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+.score{font-size:clamp(52px,14vw,96px);font-weight:700;line-height:1;letter-spacing:-.03em;font-variant-numeric:tabular-nums}
+.score small{font-size:.42em;font-weight:500;color:var(--muted);margin-left:2px}
+.msg{font-size:15px;color:var(--muted);min-height:1.4em;text-wrap:balance}
+.foot{position:absolute;left:0;right:0;bottom:0;pointer-events:none;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));
+  padding-block:0 18px;display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap}
+.stats{display:grid;grid-template-columns:auto auto;gap:2px 12px;font-family:var(--f-mono);font-size:12px;font-variant-numeric:tabular-nums}
+.stats dt{color:var(--muted)} .stats dd{margin:0;text-align:right}
+.best{font-family:var(--f-mono);font-size:12px;text-align:right}
+.best b{display:block;font-family:var(--f-display);font-size:22px}
+</style>
+</head>
+<body>
+
+<div class="app">
+  <canvas id="c"></canvas>
+  <div class="hud">
+    <div class="label" id="lab">Exemple</div>
+    <div class="score" id="score">—</div>
+    <div class="msg" id="msg">Posez le doigt et faites un tour complet autour du point central.</div>
+  </div>
+  <div class="foot">
+    <dl class="stats">
+      <dt>r min</dt><dd id="rmin">—</dd>
+      <dt>r max</dt><dd id="rmax">—</dd>
+      <dt>écart</dt><dd id="gap">—</dd>
+    </dl>
+    <div class="best"><span class="label">Record</span><b id="best">—</b></div>
+  </div>
+</div>
+
+<script>
+(()=>{
+const cv=document.getElementById('c'),ctx=cv.getContext('2d');
+const $=id=>document.getElementById(id);
+let W,H,cx,cy,dpr;
+let pts=[],drawing=false,result=null,isExample=true,turn=0,lastA=null;
+let best=null;
+try{const b=parseFloat(localStorage.getItem('cercle-best'));if(!isNaN(b))best=b}catch(e){}
+const css=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+
+/* Règle de score : écart = (rmax - rmin) / rmax ; précision = 100 - écart% */
+function score(list){
+  let mn=Infinity,mx=0;
+  for(const p of list){const r=Math.hypot(p.x-cx,p.y-cy);if(r<mn)mn=r;if(r>mx)mx=r}
+  const gap=mx>0?(mx-mn)/mx*100:100;
+  return{mn,mx,gap,pct:Math.max(0,100-gap)};
+}
+
+function resize(){
+  dpr=window.devicePixelRatio||1;W=cv.clientWidth;H=cv.clientHeight;
+  cv.width=W*dpr;cv.height=H*dpr;ctx.setTransform(dpr,0,0,dpr,0,0);
+  const ncx=W/2,ncy=H/2;
+  if(isExample||cx===undefined){cx=ncx;cy=ncy;makeExample()}
+  cx=ncx;cy=ncy;draw();
+}
+
+function makeExample(){
+  const R=Math.min(W,H)*0.3;pts=[];
+  for(let i=0;i<=200;i++){const a=i/200*Math.PI*2-Math.PI/2;
+    const r=R*(1+0.045*Math.sin(a*2+0.6)+0.02*Math.sin(a*5));
+    pts.push({x:cx+r*Math.cos(a),y:cy+r*Math.sin(a)})}
+  result=score(pts);show(result);
+}
+
+function colorFor(dev){ // dev = écart relatif au rayon moyen, en %
+  const d=Math.abs(dev);return d<2?css('--good'):d<6?css('--warn'):css('--bad');
+}
+
+function draw(){
+  ctx.clearRect(0,0,W,H);
+  // papier millimétré
+  const step=20;ctx.lineWidth=1;
+  for(let x=(cx%step);x<W;x+=step){ctx.strokeStyle=Math.round((x-cx)/step)%5===0?css('--grid-strong'):css('--grid');
+    ctx.beginPath();ctx.moveTo(Math.round(x)+.5,0);ctx.lineTo(Math.round(x)+.5,H);ctx.stroke()}
+  for(let y=(cy%step);y<H;y+=step){ctx.strokeStyle=Math.round((y-cy)/step)%5===0?css('--grid-strong'):css('--grid');
+    ctx.beginPath();ctx.moveTo(0,Math.round(y)+.5);ctx.lineTo(W,Math.round(y)+.5);ctx.stroke()}
+
+  // cercles min / max après tracé
+  if(result&&!drawing&&pts.length>2){
+    ctx.setLineDash([5,6]);ctx.lineWidth=1.25;ctx.strokeStyle=css('--muted');
+    for(const r of [result.mn,result.mx]){ctx.beginPath();ctx.arc(cx,cy,r,0,Math.PI*2);ctx.stroke()}
+    ctx.setLineDash([]);
+  }
+
+  // tracé
+  if(pts.length>1){
+    let sum=0;for(const p of pts)sum+=Math.hypot(p.x-cx,p.y-cy);const avg=sum/pts.length;
+    ctx.lineCap='round';ctx.lineJoin='round';ctx.lineWidth=5;
+    ctx.globalAlpha=isExample?0.45:1;
+    for(let i=1;i<pts.length;i++){
+      const r=Math.hypot(pts[i].x-cx,pts[i].y-cy);
+      ctx.strokeStyle=colorFor((r-avg)/avg*100);
+      ctx.beginPath();ctx.moveTo(pts[i-1].x,pts[i-1].y);ctx.lineTo(pts[i].x,pts[i].y);ctx.stroke();
+    }
+    ctx.globalAlpha=1;
+  }
+
+  // centre
+  ctx.strokeStyle=css('--accent');ctx.fillStyle=css('--accent');ctx.lineWidth=1.5;
+  ctx.beginPath();ctx.moveTo(cx-12,cy);ctx.lineTo(cx+12,cy);ctx.moveTo(cx,cy-12);ctx.lineTo(cx,cy+12);ctx.stroke();
+  ctx.beginPath();ctx.arc(cx,cy,3.5,0,Math.PI*2);ctx.fill();
+}
+
+function show(r){
+  $('score').innerHTML=r?r.pct.toFixed(1)+'<small>%</small>':'—';
+  $('rmin').textContent=r?Math.round(r.mn)+' px':'—';
+  $('rmax').textContent=r?Math.round(r.mx)+' px':'—';
+  $('gap').textContent=r?r.gap.toFixed(1)+' %':'—';
+  $('best').textContent=best!=null?best.toFixed(1)+' %':'—';
+}
+
+function setMsg(t,color){$('msg').textContent=t;$('msg').style.color=color?css(color):''}
+
+cv.addEventListener('pointerdown',e=>{
+  cv.setPointerCapture(e.pointerId);
+  drawing=true;isExample=false;result=null;turn=0;
+  pts=[{x:e.offsetX,y:e.offsetY}];lastA=Math.atan2(e.offsetY-cy,e.offsetX-cx);
+  $('lab').textContent='Précision';setMsg('Continuez jusqu’à boucler le tour…');show(null);draw();
+});
+cv.addEventListener('pointermove',e=>{
+  if(!drawing)return;
+  const evs=e.getCoalescedEvents?e.getCoalescedEvents():[e];
+  for(const ev of evs){
+    const p={x:ev.offsetX,y:ev.offsetY};pts.push(p);
+    const a=Math.atan2(p.y-cy,p.x-cx);let d=a-lastA;
+    if(d>Math.PI)d-=2*Math.PI;if(d<-Math.PI)d+=2*Math.PI;turn+=d;lastA=a;
+  }
+  const r=score(pts);show(r);
+  const deg=Math.min(360,Math.abs(turn)*180/Math.PI);
+  setMsg(deg>=355?'Tour complet — vous pouvez lever le doigt':'Tour : '+Math.round(deg)+'°');
+  draw();
+});
+function end(){
+  if(!drawing)return;drawing=false;
+  const r=score(pts);
+  if(Math.abs(turn)<Math.PI*2*0.985){result=null;show(null);setMsg('Tour incomplet : faites le tour entier du centre.','--bad');draw();return}
+  if(r.mn<25){result=null;show(null);setMsg('Trop près du centre : tracez un cercle plus grand.','--bad');draw();return}
+  result=r;
+  const isBest=best==null||r.pct>best;
+  if(isBest){best=r.pct;try{localStorage.setItem('cercle-best',String(best))}catch(e){}}
+  show(r);
+  setMsg(isBest?'Nouveau record ! Touchez l’écran pour réessayer.':(r.pct>=95?'Excellent.':r.pct>=85?'Très bien.':r.pct>=70?'Pas mal.':'Encore un effort.')+' Touchez pour réessayer.',isBest?'--good':null);
+  draw();
+}
+cv.addEventListener('pointerup',end);cv.addEventListener('pointercancel',end);
+
+const mq=window.matchMedia('(prefers-color-scheme: dark)');
+mq.addEventListener&&mq.addEventListener('change',draw);
+new MutationObserver(draw).observe(document.documentElement,{attributes:true,attributeFilter:['data-theme']});
+window.addEventListener('resize',resize);
+document.fonts&&document.fonts.ready.then(draw);
+resize();
+})();
+</script>
+</body>
+</html>
